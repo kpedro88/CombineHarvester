@@ -10,6 +10,9 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 ROOT.gROOT.SetBatch(ROOT.kTRUE)
 ROOT.TH1.AddDirectory(0)
 
+default_width = 700
+default_height = 600
+default_label_size = 0.021
 parser = argparse.ArgumentParser()
 parser.add_argument('--input', '-i', help='input json file')
 parser.add_argument('--output', '-o', help='name of the output file to create')
@@ -17,9 +20,10 @@ parser.add_argument('--translate', '-t', help='JSON file for remapping of parame
 parser.add_argument('--units', default=None, help='Add units to the best-fit parameter value')
 parser.add_argument('--per-page', type=int, default=30, help='Number of parameters to show per page')
 parser.add_argument('--max-pages', type=int, default=None, help='Maximum number of pages to write')
-parser.add_argument('--height', type=int, default=600, help='Canvas height, in pixels')
+parser.add_argument('--height', type=int, default=default_height, help='Canvas height, in pixels')
+parser.add_argument('--width', type=int, default=default_width, help='Canvas width, in pixels')
 parser.add_argument('--left-margin', type=float, default=0.4, help='Left margin, expressed as a fraction')
-parser.add_argument('--label-size', type=float, default=0.021, help='Parameter name label size')
+parser.add_argument('--label-size', type=float, default=default_label_size, help='Parameter name label size (-1: autoscale by height)')
 parser.add_argument('--cms-label', default='Internal', help='Label next to the CMS logo')
 parser.add_argument('--transparent', action='store_true', help='Draw areas as hatched lines instead of solid')
 parser.add_argument('--checkboxes', action='store_true', help='Draw an extra panel with filled checkboxes')
@@ -28,6 +32,9 @@ parser.add_argument('--color-groups', default=None, help='Comma separated list o
 parser.add_argument("--pullDef",  default=None, help="Choose the definition of the pull, see HiggsAnalysis/CombinedLimit/python/calculate_pulls.py for options")
 parser.add_argument('--POI', default=None, help='Specify a POI to draw')
 args = parser.parse_args()
+
+if args.label_size<0:
+    args.label_size = default_label_size*default_height/args.height
 
 if args.transparent:
     print 'plotImpacts.py: --transparent is now always enabled, the option will be removed in a future update'
@@ -65,7 +72,9 @@ with open(args.input) as jsonfile:
     data = json.load(jsonfile)
 
 # Set the global plotting style
-plot.ModTDRStyle(l=args.left_margin, b=0.10, width=(900 if args.checkboxes else 700), height=args.height)
+if args.checkboxes: args.width += 200
+plot.ModTDRStyle(l=args.left_margin, b=0.10, width=args.width, height=args.height)
+ROOT.TGaxis.SetExponentOffset(-0.02,-0.03)
 
 # We will assume the first POI is the one to plot
 POIs = [ele['name'] for ele in data['POIs']]
@@ -223,11 +232,12 @@ for page in xrange(n):
             i + 1, ('#color[%i]{%s}'% (col, Translate(pdata[p]['name'], translate))))
 
     # Style and draw the pulls histo
-    if externalPullDef:
-        plot.Set(h_pulls.GetXaxis(), TitleSize=0.04, LabelSize=0.03, Title=CP.returnTitle(args.pullDef))
-    else:
-        plot.Set(h_pulls.GetXaxis(), TitleSize=0.04, LabelSize=0.03, Title='(#hat{#theta}-#theta_{0})/#Delta#theta')
-
+    def tick_scale_calc(w,h): return (w - ROOT.gStyle.GetPadLeftMargin() - ROOT.gStyle.GetPadRightMargin())/w*h
+    new_tick_length = ROOT.gStyle.GetTickLength()*tick_scale_calc(default_width, default_height)/tick_scale_calc(args.width, args.height)
+    plot.Set(h_pulls.GetXaxis(), TitleSize=0.04, LabelSize=0.03,
+        Title=CP.returnTitle(args.pullDef) if externalPullDef else '(#hat{#theta}-#theta_{0})/#Delta#theta',
+        TickLength=new_tick_length,
+    )
     plot.Set(h_pulls.GetYaxis(), LabelSize=args.label_size, TickLength=0.0)
     h_pulls.GetYaxis().LabelsOption('v')
     h_pulls.Draw()
@@ -241,10 +251,11 @@ for page in xrange(n):
         newbox.SetX2(0.7-0.001)
         newbox.Draw()
         boxes.append(newbox)
+    latexTextSize = 0.02*default_height/args.height
     latex = ROOT.TLatex()
     latex.SetNDC()
     latex.SetTextFont(42)
-    latex.SetTextSize(0.02)
+    latex.SetTextSize(latexTextSize)
     latex.SetTextAlign(22)
     for entry in text_entries:
         latex.DrawLatex(*entry)
@@ -255,7 +266,7 @@ for page in xrange(n):
     h_impacts = ROOT.TH2F(
         "impacts", "impacts", 6, -max_impact * 1.1, max_impact * 1.1, n_params, 0, n_params)
     plot.Set(h_impacts.GetXaxis(), LabelSize=0.03, TitleSize=0.04, Ndivisions=505, Title=
-        '#Delta#hat{%s}' % (Translate(POI, translate)))
+        '#Delta#hat{%s}' % (Translate(POI, translate)), TickLength=new_tick_length)
     plot.Set(h_impacts.GetYaxis(), LabelSize=0, TickLength=0.0)
     h_impacts.Draw()
 
