@@ -112,12 +112,13 @@ def prefit_from_workspace(file, workspace, params, setPars=None):
     return res
 
 
-def get_singles_results(file, scanned, columns):
+def get_singles_results(file, scanned, columns, safe=False):
     """Extracts the output from the MultiDimFit singles mode
     Note: relies on the list of parameters that were run (scanned) being correct"""
     res = {}
     f = ROOT.TFile(file)
     if f is None or f.IsZombie():
+        if safe: raise RuntimeError("Could not open file: {}".format(file))
         return None
     t = f.Get("limit")
     for i, param in enumerate(scanned):
